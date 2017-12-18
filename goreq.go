@@ -62,6 +62,7 @@ const (
 
 // A GoReq is a object storing all request data for client.
 type GoReq struct {
+	Jar              *Jar
 	URL              string
 	Method           string
 	Header           map[string]string
@@ -97,7 +98,15 @@ type RetryConfig struct {
 
 // New returns a new GoReq object.
 func New() *GoReq {
+	cookiejarOptions := cookiejar.Options{
+		PublicSuffixList: publicsuffix.List,
+	}
+	jar, err := NewJar(&cookiejarOptions)
+	if err != nil {
+		panic(err)
+	}
 	gr := &GoReq{
+		Jar:              jar,
 		Data:             make(map[string]interface{}),
 		Header:           make(map[string]string),
 		FormData:         url.Values{},
@@ -109,6 +118,31 @@ func New() *GoReq {
 		BasicAuth:        struct{ Username, Password string }{},
 		Debug:            false,
 		CurlCommand:      false,
+		logger:           log.New(os.Stderr, "[goreq]", log.LstdFlags),
+		retry:            &RetryConfig{RetryCount: 0, RetryTimeout: 0, RetryOnHTTPStatus: nil},
+		bindResponseBody: nil,
+	}
+	return gr
+}
+func NewWithGoReq(req *GoReq) *GoReq {
+	jar, err := NewWithJar(req.Jar)
+	if err != nil {
+		panic(err)
+	}
+	client := &http.Client{Jar: jar}
+	gr := &GoReq{
+		Jar:              jar,
+		Data:             make(map[string]interface{}),
+		Header:           make(map[string]string),
+		FormData:         url.Values{},
+		QueryData:        url.Values{},
+		Client:           client,
+		Transport:        &http.Transport{},
+		Cookies:          make([]*http.Cookie, 0),
+		Errors:           nil,
+		BasicAuth:        req.BasicAuth,
+		Debug:            req.Debug,
+		CurlCommand:      req.CurlCommand,
 		logger:           log.New(os.Stderr, "[goreq]", log.LstdFlags),
 		retry:            &RetryConfig{RetryCount: 0, RetryTimeout: 0, RetryOnHTTPStatus: nil},
 		bindResponseBody: nil,
@@ -141,11 +175,7 @@ func (gr *GoReq) SetClient(client *http.Client) *GoReq {
 }
 
 func (gr *GoReq) setDefaultClient() *GoReq {
-	cookiejarOptions := cookiejar.Options{
-		PublicSuffixList: publicsuffix.List,
-	}
-	jar, _ := cookiejar.New(&cookiejarOptions)
-	client := &http.Client{Jar: jar}
+	client := &http.Client{Jar: gr.Jar}
 	gr.Client = client
 	return gr
 }
@@ -879,6 +909,7 @@ func (gr *GoReq) EndBytes(callback ...func(response Response, body []byte, errs 
 	if len(callback) != 0 {
 		callback[0](&respCallback, body, gr.Errors)
 	}
+
 	return resp, body, nil
 }
 
