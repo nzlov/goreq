@@ -24,6 +24,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"mime/multipart"
@@ -454,10 +455,10 @@ func (gr *GoReq) queryStruct(content interface{}) *GoReq {
 }
 
 func (gr *GoReq) queryString(content string) *GoReq {
-	var val map[string]string
+	var val map[string]interface{}
 	if err := json.Unmarshal([]byte(content), &val); err == nil {
 		for k, v := range val {
-			gr.QueryData.Add(k, v)
+			gr.QueryData.Add(k, fmt.Sprint(v))
 		}
 	} else {
 		if queryVal, err := url.ParseQuery(content); err == nil {
@@ -917,7 +918,7 @@ func initRequest(req *http.Request, gr *GoReq) {
 	for k, v := range gr.Header {
 		req.Header.Set(k, v)
 	}
-	// Add all querystring from Query func
+
 	q := req.URL.Query()
 	for k, v := range gr.QueryData {
 		for _, vv := range v {
@@ -925,6 +926,7 @@ func initRequest(req *http.Request, gr *GoReq) {
 		}
 	}
 	req.URL.RawQuery = q.Encode()
+	// Add all querystring from Query func
 
 	// Add basic auth
 	if gr.BasicAuth != (struct{ Username, Password string }{}) {
